@@ -18,7 +18,21 @@ The goal is to demonstrate how AI can be integrated into an operational business
 ---
 
 ## System Architecture
+### Workflow Visualizations
 
+#### 1. AI Lead Qualification
+
+The workflow retrieves new leads, uses an LLM for qualification, validates the result using deterministic business rules, persists the decision, and routes the lead based on priority.
+
+![AURA Lead Qualification Workflow](screenshots/lead-qualification.png)
+
+#### 2. Purchase Order Processing
+
+The workflow validates incoming purchase orders, checks inventory, handles sufficient/insufficient stock paths, updates inventory, and advances the order through the procurement and production workflow.
+
+![AURA Purchase Order Processing Workflow](screenshots/purchase-order-processing.png)
+
+---
 ```text
                     ┌──────────────────────┐
                     │   Hospital / Lead    │
