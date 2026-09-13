@@ -238,7 +238,57 @@ A simplified PO payload can follow this structure:
       "unit_price": 5000
     }
   ]
-}## Examples
+}## Agentic AI Design
+
+AURA uses a hybrid AI-and-rules architecture rather than delegating critical business decisions entirely to an LLM.
+
+### AI-driven reasoning
+
+The lead qualification workflow uses an LLM to interpret lead information and produce:
+
+- Lead score
+- Priority
+- Qualification status
+- Reasoning
+- Recommended next action
+
+This allows unstructured business information to be converted into structured operational decisions.
+
+### Deterministic validation
+
+AI-generated decisions are subsequently validated using deterministic business rules.
+
+For example, lead priority is independently derived from the lead score:
+
+| Score | Deterministic Priority |
+|---:|---|
+| 80–100 | HOT |
+| 50–79 | WARM |
+| 0–49 | COLD |
+
+This reduces the risk of allowing an LLM to make an unchecked operational decision.
+
+### Workflow execution
+
+n8n orchestrates the resulting actions, including:
+
+- Database persistence
+- Lead routing
+- Sales and follow-up communication
+- Purchase-order validation
+- Inventory checks
+- Inventory reservation
+- Stock updates
+- Production-order creation
+- Procurement exception handling
+
+### Design principle
+
+The architecture deliberately separates:
+
+**LLM interpretation → deterministic validation → workflow execution → persistent state**
+
+This separation provides a clearer boundary between probabilistic AI reasoning and business-critical deterministic logic.## Examples
 
 The repository includes representative example inputs and outputs for the two core AURA workflows.
 
