@@ -1,0 +1,653 @@
+{
+  "name": "AURA Purchase Order Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "purchase-order",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -112,
+        -16
+      ],
+      "id": "745cf576-7d28-4617-91dc-b2e91973f164",
+      "name": "Purchase Order Received"
+    },
+    {
+      "parameters": {
+        "jsCode": "const order = $json.body ?? $json;\n\nconst errors = [];\n\n// Validate PO number\nif (!order.po_number || typeof order.po_number !== 'string') {\n  errors.push('PO number is missing');\n}\n\n// Validate supplier\nif (!order.supplier_name || typeof order.supplier_name !== 'string') {\n  errors.push('Supplier name is missing');\n}\n\n// Validate items\nif (!Array.isArray(order.items) || order.items.length === 0) {\n  errors.push('At least one item is required');\n} else {\n  order.items.forEach((item, index) => {\n\n    if (!item.product_id) {\n      errors.push(`Item ${index + 1}: product ID is missing`);\n    }\n\n    if (!item.product_sku) {\n      errors.push(`Item ${index + 1}: product SKU is missing`);\n    }\n\n    if (!item.product_name) {\n      errors.push(`Item ${index + 1}: product name is missing`);\n    }\n\n    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {\n      errors.push(`Item ${index + 1}: quantity must be greater than 0`);\n    }\n\n    if (typeof item.unit_price !== 'number' || item.unit_price < 0) {\n      errors.push(`Item ${index + 1}: unit price is invalid`);\n    }\n  });\n}\n\n// Validate delivery date\nif (!order.delivery_date) {\n  errors.push('Delivery date is missing');\n} else if (isNaN(Date.parse(order.delivery_date))) {\n  errors.push('Delivery date is invalid');\n}\n\nreturn [\n  {\n    json: {\n      ...order,\n      validation: {\n        valid: errors.length === 0,\n        errors\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        -16
+      ],
+      "id": "dfe37be3-a0bf-4473-a65a-f83e131f0eeb",
+      "name": "Validate Order"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7edd8f24-6073-4a02-a750-dd8f04717bf0",
+              "leftValue": "={{ $json.validation.valid }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        320,
+        -48
+      ],
+      "id": "bb6be149-9c24-4b62-90cc-d13349fd8b68",
+      "name": "Order Validation"
+    },
+    {
+      "parameters": {
+        "tableId": "purchase_orders",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "customer_name",
+              "fieldValue": "={{ $json.customer_name }}"
+            },
+            {
+              "fieldId": "customer_email",
+              "fieldValue": "={{ $json.customer_email }}"
+            },
+            {
+              "fieldId": "order_number",
+              "fieldValue": "={{ $json.po_number }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "VALIDATED"
+            },
+            {
+              "fieldId": "total_amount",
+              "fieldValue": "={{ $json.items.reduce((total, item) => total + (Number(item.quantity) * Number(item.unit_price)), 0) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        560,
+        -112
+      ],
+      "id": "322be2da-ed26-4906-bf3d-e9cba2236861",
+      "name": "Create Order"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "products",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "sku",
+              "condition": "eq",
+              "keyValue": "={{ $('Purchase Order Received').item.json.body.items[0].product_sku }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        784,
+        -112
+      ],
+      "id": "f14476f7-e077-4231-a882-31d8ac906d4b",
+      "name": "Check Inventory"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8d1dea2f-376e-42ab-b483-32d70f78915c",
+              "leftValue": "={{ $('Check Inventory').item.json.stock_quantity }}",
+              "rightValue": "={{ $('Purchase Order Received').item.json.body.items[0].quantity }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1232,
+        -112
+      ],
+      "id": "b32f6b74-cb93-423a-ab26-9618386ff236",
+      "name": "Inventtory Availability"
+    },
+    {
+      "parameters": {
+        "jsCode": "const order = $('Create Order').item.json;\nconst product = $('Check Inventory').item.json;\nconst requested = $('Purchase Order Received').item.json.body.items[0].quantity;\n\nreturn [{\n  json: {\n    order_id: order.id,\n    order_number: order.order_number,\n    customer_name: order.customer_name,\n    customer_email: order.customer_email,\n    product_sku: product.sku,\n    product_name: product.name,\n    requested_quantity: requested,\n    available_quantity: product.stock_quantity,\n    shortage_quantity: requested - product.stock_quantity,\n    exception_type: \"INSUFFICIENT_INVENTORY\",\n    status: \"PENDING\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1456,
+        -16
+      ],
+      "id": "4b5bdddc-7bcc-414c-9440-5be303738ce4",
+      "name": "Prepare Inventory Exception"
+    },
+    {
+      "parameters": {
+        "tableId": "procurement_orders",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "order_id",
+              "fieldValue": "={{ $json.order_id }}"
+            },
+            {
+              "fieldId": "product_sku",
+              "fieldValue": "={{ $json.product_sku }}"
+            },
+            {
+              "fieldId": "product_name",
+              "fieldValue": "={{ $json.product_name }}"
+            },
+            {
+              "fieldId": "requested_quantity",
+              "fieldValue": "={{ $json.requested_quantity }}"
+            },
+            {
+              "fieldId": "available_quantity",
+              "fieldValue": "={{ $json.available_quantity }}"
+            },
+            {
+              "fieldId": "shortage_quantity",
+              "fieldValue": "={{ $json.shortage_quantity }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $json.status }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        -16
+      ],
+      "id": "1306cb08-1abc-4bef-ba74-6618736d7569",
+      "name": "Create Procurement Order"
+    },
+    {
+      "parameters": {
+        "sendTo": "{{ $env.SALES_EMAIL }}",
+        "subject": "=Inventory Shortage - {{ $('Prepare Inventory Exception').item.json.order_number }}",
+        "message": "=<h2>Inventory Shortage Alert</h2>\n\n<p>A shortage has been detected for the following purchase order.</p>\n\n<p>\n<strong>Purchase Order:</strong>\n{{ $('Prepare Inventory Exception').item.json.order_number }}\n</p>\n\n<p>\n<strong>Customer:</strong>\n{{ $('Prepare Inventory Exception').item.json.customer_name }}\n</p>\n\n<p>\n<strong>Product:</strong> {{ $json.product_name }}<br>\n<strong>SKU:</strong> {{ $json.product_sku }}<br>\n<strong>Requested Quantity:</strong> {{ $json.requested_quantity }}<br>\n<strong>Available Quantity:</strong> {{ $json.available_quantity }}<br>\n<strong>Shortage Quantity:</strong> {{ $json.shortage_quantity }}<br>\n<strong>Status:</strong> {{ $json.status }}\n</p>\n\n<p>Please initiate procurement for the shortage quantity.</p>\n\n<p>Regards,<br>\nAURA Procurement System</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1904,
+        -16
+      ],
+      "id": "7b9899e1-089e-4e58-9d15-dd8719f9b6b8",
+      "name": "Notify Procurement - Inventory Shortage"
+    },
+    {
+      "parameters": {
+        "tableId": "inventory_reservations",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "order_id",
+              "fieldValue": "={{ $('Create Order').item.json.id }}"
+            },
+            {
+              "fieldId": "product_id",
+              "fieldValue": "={{ $('Check Inventory').item.json.id }}"
+            },
+            {
+              "fieldId": "product_sku",
+              "fieldValue": "={{ $('Check Inventory').item.json.sku }}"
+            },
+            {
+              "fieldId": "product_name",
+              "fieldValue": "={{ $('Check Inventory').item.json.name }}"
+            },
+            {
+              "fieldId": "quantity",
+              "fieldValue": "={{ $('Purchase Order Received').item.json.body.items[0].quantity }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "RESERVED"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1456,
+        -208
+      ],
+      "id": "9a7a36af-b588-4274-98e0-b991a2cd7867",
+      "name": "Reserve Inventory"
+    },
+    {
+      "parameters": {
+        "tableId": "activity_log",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "entity_type",
+              "fieldValue": "purchase_order"
+            },
+            {
+              "fieldId": "entity_id",
+              "fieldValue": "={{ $('Create Order').item.json.id }}"
+            },
+            {
+              "fieldId": "event_type",
+              "fieldValue": "inventory_checked"
+            },
+            {
+              "fieldId": "actor",
+              "fieldValue": "AI"
+            },
+            {
+              "fieldId": "description",
+              "fieldValue": "Inventory checked for purchase order"
+            },
+            {
+              "fieldId": "metadata",
+              "fieldValue": "={{ JSON.stringify({\n  requested_quantity: $('Purchase Order Received').item.json.body.items[0].quantity,\n  available_quantity: $json.stock_quantity,\n  product_sku: $json.sku,\n  product_id: $json.id,\n  product_name: $json.name\n}) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        -112
+      ],
+      "id": "0b3c03e9-19ad-41ed-9510-acffa2b2fbde",
+      "name": "Log Inventory Check"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "products",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Check Inventory').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "stock_quantity",
+              "fieldValue": "={{ $('Check Inventory').item.json.stock_quantity - $('Purchase Order Received').item.json.body.items[0].quantity }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        -208
+      ],
+      "id": "cf14dec8-fbd0-41db-8b1e-01086e6af257",
+      "name": "Update Stock"
+    },
+    {
+      "parameters": {
+        "jsCode": "const order = $json;\n\nreturn [\n  {\n    json: {\n      status: \"REJECTED\",\n      po_number: order.po_number || null,\n      customer_name: order.customer_name || null,\n      customer_email: order.customer_email || null,\n      reason: \"Purchase order failed validation\",\n      validation_errors: order.validation?.errors || [],\n      rejected_at: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        80
+      ],
+      "id": "fcc25482-528f-4344-bd6d-1a2cf6699763",
+      "name": "Prepare Order Rejection"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "purchase_orders",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.order_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $json.status }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2128,
+        -208
+      ],
+      "id": "afccd258-0457-4da2-b21c-d61601a64d9c",
+      "name": "Update PO Status"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const reservation = $('Reserve Inventory').item.json;\n\nconst currentStatus = reservation.status;\n\nconst transitions = {\n  RESERVED: \"PRODUCTION_READY\",\n  PRODUCTION_READY: \"IN_PRODUCTION\",\n  IN_PRODUCTION: \"PRODUCTION_COMPLETE\",\n  PRODUCTION_COMPLETE: \"QC_PENDING\",\n  QC_PASSED: \"READY_FOR_DISPATCH\",\n  READY_FOR_DISPATCH: \"IN_TRANSIT\",\n  IN_TRANSIT: \"DELIVERED\",\n  DELIVERED: \"COMPLETED\"\n};\n\nconst nextStatus = transitions[currentStatus];\n\nif (!nextStatus) {\n  throw new Error(\n    `No automatic transition defined for status: ${currentStatus}`\n  );\n}\n\nreturn {\n  json: {\n    ...reservation,\n    previous_status: currentStatus,\n    status: nextStatus\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1904,
+        -208
+      ],
+      "id": "9b3247c0-d386-4248-b6e9-df34f1ce2fed",
+      "name": "Determine Next PO Status"
+    },
+    {
+      "parameters": {
+        "tableId": "production_orders",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "order_id",
+              "fieldValue": "={{ $json.id }}"
+            },
+            {
+              "fieldId": "product_id",
+              "fieldValue": "={{ $('Determine Next PO Status').item.json.product_id }}"
+            },
+            {
+              "fieldId": "quantity",
+              "fieldValue": "={{ $('Determine Next PO Status').item.json.quantity }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "PENDING"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2352,
+        -208
+      ],
+      "id": "1f91e19f-a965-47dd-b9cb-6ead649ea177",
+      "name": "Create Production Order"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "purchase_orders",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Create Order').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "REJECTED"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        784,
+        80
+      ],
+      "id": "55fbd310-309c-4c48-bc27-f3fb3a097a42",
+      "name": "Update PO Rejected"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Purchase Order Received": {
+      "main": [
+        [
+          {
+            "node": "Validate Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Order": {
+      "main": [
+        [
+          {
+            "node": "Order Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Validation": {
+      "main": [
+        [
+          {
+            "node": "Create Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Order Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Order": {
+      "main": [
+        [
+          {
+            "node": "Check Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Inventory": {
+      "main": [
+        [
+          {
+            "node": "Log Inventory Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inventtory Availability": {
+      "main": [
+        [
+          {
+            "node": "Reserve Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Inventory Exception",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Inventory Exception": {
+      "main": [
+        [
+          {
+            "node": "Create Procurement Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Procurement Order": {
+      "main": [
+        [
+          {
+            "node": "Notify Procurement - Inventory Shortage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Inventory Check": {
+      "main": [
+        [
+          {
+            "node": "Inventtory Availability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reserve Inventory": {
+      "main": [
+        [
+          {
+            "node": "Update Stock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Stock": {
+      "main": [
+        [
+          {
+            "node": "Determine Next PO Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update PO Status": {
+      "main": [
+        [
+          {
+            "node": "Create Production Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Next PO Status": {
+      "main": [
+        [
+          {
+            "node": "Update PO Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Order Rejection": {
+      "main": [
+        [
+          {
+            "node": "Update PO Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "088d579c-586b-4028-852f-225aa55e7cf3",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "id": "OfAxJXy9hTPepJiz",
+  "tags": []
+}

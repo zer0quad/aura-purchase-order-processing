@@ -1,0 +1,605 @@
+{
+  "name": "AURA - Lead Qualification",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leads",
+        "returnAll": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "New"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -672,
+        16
+      ],
+      "id": "a8f9baf4-c073-45ef-98db-f535ca000e06",
+      "name": "Get New Leads"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the lead qualification engine for AURA, an AI-powered B2B sales automation system for a hospital mattress manufacturer.\n\nYour task is to evaluate the hospital lead provided below and determine its commercial potential.\n\nEvaluate the lead using the following factors:\n\n1. Hospital size / estimated bed count\n2. Whether the hospital is private or public\n3. Whether the identified contact is involved in procurement or purchasing\n4. Potential mattress purchasing opportunity\n5. Overall commercial potential\n6. Any other relevant information explicitly present in the supplied lead, hospital, or contact data\n\nDo NOT invent, assume, or fabricate information that is not present in the input.\n\nSCORING:\n\nAssign lead_score as an integer from 0 to 100.\n\nUse the following guidelines:\n\n- Larger hospitals generally represent a larger potential purchasing opportunity.\n- A procurement manager, purchasing manager, procurement officer, or other clearly relevant purchasing decision-maker is a strong positive signal.\n- A private hospital can represent a strong commercial opportunity.\n- A public hospital can also represent a commercial opportunity, but purchasing processes may be more structured.\n- A clear connection between the hospital/contact and potential mattress purchasing is a strong positive signal.\n- Missing information should reduce confidence rather than being assumed to be positive.\n- Do not award points for information that is not present.\n\nPRIORITY:\n\nPriority MUST be determined strictly from lead_score:\n\n80–100 = HOT\n50–79 = WARM\n0–49 = COLD\n\nExamples:\n\n85 → HOT\n70 → WARM\n50 → WARM\n35 → COLD\n20 → COLD\n\nDo NOT choose priority independently of lead_score.\n\nQUALIFICATION:\n\nChoose exactly one:\n\nQUALIFIED\nPOTENTIAL\nUNQUALIFIED\n\nUse these guidelines:\n\nQUALIFIED:\nThere is strong evidence of a commercially relevant hospital opportunity and the available contact is clearly involved in procurement or purchasing.\n\nPOTENTIAL:\nThere are promising commercial signals, but important information is missing or the purchasing opportunity is not sufficiently established.\n\nUNQUALIFIED:\nThere is insufficient evidence of commercial potential or the available information indicates that the lead is unlikely to be a relevant opportunity.\n\nREASON:\n\nProvide a concise explanation of the score, priority, and qualification.\n\nBase the explanation only on information explicitly present in the input.\n\nNEXT ACTION:\n\nProvide exactly one practical next sales action appropriate to the lead's priority and qualification.\n\nExamples include:\n\n- Schedule a discovery call with the procurement manager.\n- Send a product catalogue to the procurement department.\n- Conduct further research to identify the purchasing decision-maker.\n- Add the lead to a follow-up sequence.\n- Add the lead to a long-term nurture sequence.\n- Do not pursue the lead at this time.\n\nOUTPUT REQUIREMENTS:\n\nReturn exactly these fields:\n\nlead_score:\nAn integer from 0 to 100.\n\npriority:\nExactly one of HOT, WARM, COLD.\n\nqualification:\nExactly one of QUALIFIED, POTENTIAL, UNQUALIFIED.\n\nreason:\nA concise explanation.\n\nnext_action:\nThe single most appropriate next sales action.\n\nReturn no additional fields.\n\nDo not return Markdown.\nDo not return code fences.\nDo not return explanations outside the requested fields.\n\nLead and hospital information:\n\n{{ JSON.stringify($json) }}",
+        "hasOutputParser": true,
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -336,
+        16
+      ],
+      "id": "32d51cc8-3951-42ab-af6e-28b4cdc14b06",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -192,
+        160
+      ],
+      "id": "c3a90402-00de-48b6-a364-b1a6a1e5d076",
+      "name": "AI Lead Qualification"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"lead_score\": 88,\n  \"priority\": \"HOT\",\n  \"qualification\": \"QUALIFIED\",\n  \"reason\": \"Large private hospital with 250 beds and an identified procurement manager, indicating strong potential for hospital mattress procurement.\",\n  \"next_action\": \"Contact the procurement manager with a hospital mattress proposal.\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -48,
+        160
+      ],
+      "id": "32ec1a64-07c0-4004-bf9c-78d65593f3d4",
+      "name": "Exact Output"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\n\nfor (const item of $input.all()) {\n  const ai = item.json.output ?? {};\n\n  const leadScore = Number(ai.lead_score);\n  const aiPriority = ai.priority;\n  const qualification = ai.qualification;\n  const reason = ai.reason;\n  const nextAction = ai.next_action;\n\n  const errors = [];\n\n  // Validate lead score\n  if (\n    !Number.isInteger(leadScore) ||\n    leadScore < 0 ||\n    leadScore > 100\n  ) {\n    errors.push(\"Invalid lead_score\");\n  }\n\n  // Determine priority from score\n  let expectedPriority;\n\n  if (leadScore >= 80) {\n    expectedPriority = \"HOT\";\n  } else if (leadScore >= 50) {\n    expectedPriority = \"WARM\";\n  } else {\n    expectedPriority = \"COLD\";\n  }\n\n  // Validate AI's priority\n  if (![\"HOT\", \"WARM\", \"COLD\"].includes(aiPriority)) {\n    errors.push(\"Invalid priority\");\n  }\n\n  // Detect disagreement between AI and business rule\n  if (\n    [\"HOT\", \"WARM\", \"COLD\"].includes(aiPriority) &&\n    aiPriority !== expectedPriority\n  ) {\n    errors.push(\n      `Priority mismatch: AI returned ${aiPriority}, but score ${leadScore} requires ${expectedPriority}`\n    );\n  }\n\n  // Validate qualification\n  if (\n    ![\"QUALIFIED\", \"POTENTIAL\", \"UNQUALIFIED\"].includes(qualification)\n  ) {\n    errors.push(\"Invalid qualification\");\n  }\n\n  // Validate reason\n  if (\n    typeof reason !== \"string\" ||\n    !reason.trim()\n  ) {\n    errors.push(\"Missing reason\");\n  }\n\n  // Validate next action\n  if (\n    typeof nextAction !== \"string\" ||\n    !nextAction.trim()\n  ) {\n    errors.push(\"Missing next_action\");\n  }\n\n  results.push({\n    json: {\n      ...item.json,\n\n      ai_result: {\n        lead_score: leadScore,\n\n        // Use deterministic business rule\n        priority: expectedPriority,\n\n        qualification,\n        reason,\n        next_action: nextAction\n      },\n\n      validation: {\n        valid: errors.length === 0,\n        errors\n      }\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        16
+      ],
+      "id": "048683d1-86a2-47fd-a519-a2c190ff0219",
+      "name": "Validate Lead"
+    },
+    {
+      "parameters": {
+        "tableId": "ai_qualifications",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "lead_id",
+              "fieldValue": "={{ $('Get Enriched Leads').item.json.id }}"
+            },
+            {
+              "fieldId": "lead_score",
+              "fieldValue": "={{ $json.ai_result.lead_score }}"
+            },
+            {
+              "fieldId": "priority",
+              "fieldValue": "={{ $json.ai_result.priority }}"
+            },
+            {
+              "fieldId": "qualification",
+              "fieldValue": "={{ $json.ai_result.qualification }}"
+            },
+            {
+              "fieldId": "reason",
+              "fieldValue": "={{ $json.ai_result.reason }}"
+            },
+            {
+              "fieldId": "next_action",
+              "fieldValue": "={{ $json.ai_result.next_action }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        112,
+        16
+      ],
+      "id": "b3d93452-60aa-4251-94e7-ab86d945ea10",
+      "name": "Create AI Qualification"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.lead_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "lead_score",
+              "fieldValue": "={{ $json.lead_score }}"
+            },
+            {
+              "fieldId": "priority",
+              "fieldValue": "={{ $json.priority }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $json.qualification }}"
+            },
+            {
+              "fieldId": "qualification_reason",
+              "fieldValue": "={{ $json.reason }}"
+            },
+            {
+              "fieldId": "next_action",
+              "fieldValue": "={{ $json.next_action }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        256,
+        16
+      ],
+      "id": "1bd931e4-7e72-46aa-bea8-de1ec8573d6c",
+      "name": "Update lead"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "HOT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "67ea39b2-a581-4666-8531-290e0d6934b7"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "HOT - Sales"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "507ed2bd-c1fa-4c9c-8f3a-bb4a232be3a9",
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "WARM",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "WARM - Follow Up"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "b94b9b1e-b70f-467d-a519-651af3b8eee8",
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "COLD",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "COLD - Nurture"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -704,
+        256
+      ],
+      "id": "32dadb1c-334a-4876-8d5e-9395d4aa2286",
+      "name": "Switch"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        16
+      ],
+      "id": "813a9c0b-3485-4973-ad48-618bcc089096",
+      "name": "Trigger"
+    },
+    {
+      "parameters": {
+        "url": "{{ $env.SUPABASE_REST_URL }}/leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "*,hospitals(*),contacts(*)"
+            },
+            {
+              "name": "id",
+              "value": "={{ 'eq.' + $json.id }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -512,
+        16
+      ],
+      "id": "6fec76de-abaa-4b87-a8e8-c3ae2dce0ea4",
+      "name": "Get Enriched Leads"
+    },
+    {
+      "parameters": {
+        "tableId": "activity_log",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "entity_type",
+              "fieldValue": "lead"
+            },
+            {
+              "fieldId": "entity_id",
+              "fieldValue": "={{ $json.id }}"
+            },
+            {
+              "fieldId": "event_type",
+              "fieldValue": "lead_routed"
+            },
+            {
+              "fieldId": "actor",
+              "fieldValue": "AI"
+            },
+            {
+              "fieldId": "description",
+              "fieldValue": "={{ `Lead ${$json.id} classified as ${$json.priority} priority and routed for ${$json.next_action}` }}"
+            },
+            {
+              "fieldId": "metadata",
+              "fieldValue": "={{ {   lead_score: $json.lead_score,   priority: $json.priority,   qualification: $json.status,   next_action: $json.next_action } }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -832,
+        528
+      ],
+      "id": "8a158b88-673a-4f99-9cb9-e45f61867e7a",
+      "name": "Log Lead Activity"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.SALES_EMAIL }}",
+        "subject": "={{ `Mattress Procurement Discussion — ${$('Get Enriched Leads').item.json.hospitals.name}` }}",
+        "message": "={{ ` <p>Dear ${$('Get Enriched Leads').item.json.contacts.name},</p>  <p>I’m reaching out regarding your hospital’s mattress procurement requirements.</p>  <p>Based on the information available to us, ${$('Get Enriched Leads').item.json.hospitals.name} appears to have a relevant requirement for hospital mattresses, and we would be interested in discussing how we could support your procurement needs.</p>  <p>Would you be available for a short discovery call to discuss your current requirements, specifications, and procurement process?</p>  <p>We would be happy to arrange a product discussion at a time convenient for you.</p>  <p>Best regards,<br> AURA Sales Team</p> ` }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -528,
+        192
+      ],
+      "id": "403ee76e-30ce-4b96-a4f8-dc84b8748ed3",
+      "name": "Send a message"
+    },
+    {
+      "parameters": {
+        "sendTo": "{{ $env.SALES_EMAIL }}",
+        "subject": "={{ `Following Up — ${$('Get Enriched Leads').item.json.hospitals.name}` }}",
+        "message": "={{ ` <p>Dear ${$('Get Enriched Leads').item.json.contacts.name},</p>  <p>I wanted to follow up regarding your hospital's mattress procurement requirements.</p>  <p>Based on the information available to us, we believe there may be an opportunity to support ${$('Get Enriched Leads').item.json.hospitals.name} with its hospital mattress requirements.</p>  <p>If this is something your team is currently evaluating, I would be happy to arrange a short call to understand your requirements and procurement timeline.</p>  <p>Please let me know a convenient time to connect.</p>  <p>Best regards,<br> AURA Sales Team</p> ` }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -384,
+        304
+      ],
+      "id": "b3679e97-d7f0-4290-83a6-9953425d860b",
+      "name": "Send WARM Follow Up"
+    },
+    {
+      "parameters": {
+        "sendTo": "{{ $env.SALES_EMAIL }}",
+        "subject": "={{ `Hospital Mattress Solutions — ${$('Get Enriched Leads').item.json.hospitals.name}` }}",
+        "message": "={{ ` <p>Dear ${$('Get Enriched Leads').item.json.contacts.name},</p>  <p>I wanted to introduce AURA and our hospital mattress solutions for ${$('Get Enriched Leads').item.json.hospitals.name}.</p>  <p>We work with healthcare organizations looking for reliable mattress solutions suited to hospital environments and patient-care requirements.</p>  <p>If mattress procurement becomes a priority for your team in the future, we would be happy to discuss your requirements and provide more information.</p>  <p>Please feel free to reach out whenever the timing is appropriate.</p>  <p>Best regards,<br> AURA Sales Team</p> ` }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        400
+      ],
+      "id": "9300ca4d-fb1b-44a9-8ae3-ad07c8e1da46",
+      "name": "Send COLD Follow Up"
+    },
+    {
+      "parameters": {
+        "tableId": "activity_log",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "entity_type",
+              "fieldValue": "lead"
+            },
+            {
+              "fieldId": "entity_id",
+              "fieldValue": "={{ $json.id }}"
+            },
+            {
+              "fieldId": "event_type",
+              "fieldValue": "lead_routing_exception"
+            },
+            {
+              "fieldId": "actor",
+              "fieldValue": "AI"
+            },
+            {
+              "fieldId": "description",
+              "fieldValue": " Lead could not be routed to HOT, WARM, or COLD and was sent to fallback handling."
+            },
+            {
+              "fieldId": "metadata",
+              "fieldValue": "={{ {\n  lead_score: $json.lead_score,\n  priority: $json.priority,\n  status: $json.status,\n  qualification_reason: $json.qualification_reason,\n  next_action: $json.next_action\n} }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -496,
+        448
+      ],
+      "id": "c4ca407a-3193-4c87-a52f-fc6f88b6db20",
+      "name": "Log Lead Exception"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get New Leads": {
+      "main": [
+        [
+          {
+            "node": "Get Enriched Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Lead Qualification": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exact Output": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Validate Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Lead": {
+      "main": [
+        [
+          {
+            "node": "Create AI Qualification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create AI Qualification": {
+      "main": [
+        [
+          {
+            "node": "Update lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update lead": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get New Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Log Lead Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Lead Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send WARM Follow Up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Lead Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send COLD Follow Up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Lead Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Lead Exception",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Enriched Leads": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "6240744c-cc12-49e1-933a-0f52e48e2828",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "id": "LfEj5lGyp1VwbYbP",
+  "tags": []
+}
