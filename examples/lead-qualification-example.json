@@ -1,0 +1,30 @@
+{
+  "input": {
+    "lead": {
+      "company_name": "Example Hospital",
+      "company_type": "Private Hospital",
+      "hospital_size": "Large",
+      "procurement_contact": true,
+      "estimated_purchasing_opportunity": "High",
+      "location": "Bengaluru"
+    }
+  },
+  "ai_decision": {
+    "lead_score": 88,
+    "priority": "HOT",
+    "qualification": "QUALIFIED",
+    "reason": "Large private hospital with an identified procurement contact and strong purchasing potential.",
+    "next_action": "Prioritize sales outreach and initiate procurement discussion."
+  },
+  "validation": {
+    "score_range_valid": true,
+    "priority_valid": true,
+    "qualification_valid": true,
+    "deterministic_priority": "HOT",
+    "priority_matches_score": true
+  },
+  "routing": {
+    "route": "HOT",
+    "action": "Sales outreach"
+  }
+}

@@ -238,7 +238,21 @@ A simplified PO payload can follow this structure:
       "unit_price": 5000
     }
   ]
-}
+}## Examples
+
+The repository includes representative example inputs and outputs for the two core AURA workflows.
+
+### Lead Qualification
+
+`examples/lead-qualification-example.json` demonstrates the expected lead qualification decision, deterministic validation, and priority-based routing.
+
+### Purchase Order Processing
+
+`examples/purchase-order-example.json` demonstrates PO validation, inventory evaluation, reservation, stock update, and transition toward production.
+
+> **Note:** The example values are illustrative and are not taken from live customer or production data.
+
+---
 Current Prototype Scope
 
 The current repository represents a working prototype rather than a production deployment.

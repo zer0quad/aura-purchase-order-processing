@@ -1,0 +1,38 @@
+{
+  "input": {
+    "purchase_order": {
+      "po_number": "PO-2026-001",
+      "supplier": "Example Hospital",
+      "items": [
+        {
+          "product_id": "MAT-001",
+          "product_name": "Hospital Mattress",
+          "quantity": 50,
+          "unit_price": 4500
+        }
+      ],
+      "delivery_date": "2026-10-15"
+    }
+  },
+  "validation": {
+    "po_number_valid": true,
+    "supplier_valid": true,
+    "items_valid": true,
+    "quantity_valid": true,
+    "unit_price_valid": true,
+    "delivery_date_valid": true,
+    "overall_status": "VALIDATED"
+  },
+  "inventory": {
+    "product_id": "MAT-001",
+    "requested_quantity": 50,
+    "available_quantity": 75,
+    "inventory_status": "SUFFICIENT"
+  },
+  "workflow_result": {
+    "order_status": "PRODUCTION_READY",
+    "inventory_reserved": true,
+    "stock_updated": true,
+    "production_order_created": true
+  }
+}
